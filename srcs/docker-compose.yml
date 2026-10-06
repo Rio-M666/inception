@@ -8,4 +8,8 @@ services:
       - "8080:80"
   wordpress:
     build: srcs/requirements/wordpress/.
-    container_name: inception_qordpress
+    container_name: inception_wordpress
+
+  mariadb:
+    build: srcs/requirements/mariadb/.
+    container_name: inception_mariadb
