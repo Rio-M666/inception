@@ -5,7 +5,7 @@ services:
     build: ./requirements/nginx
     container_name: inception_nginx
     ports:
-      - "80:80"
+      - "443"
     volumes:
       - ./web:/var/www/html
   wordpress:
@@ -15,5 +15,9 @@ services:
       - ./web:/var/www/html
 
   mariadb:
-    build: srcs/requirements/mariadb/.
+    build: ./requirements/mariadb/.
     container_name: inception_mariadb
+
+networks:
+  inception:
+    driver: bridge
