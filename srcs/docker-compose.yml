@@ -2,13 +2,17 @@ version: "3.8"
 
 services:
   nginx:
-    build: srcs/requirements/nginx/.
+    build: ./requirements/nginx
     container_name: inception_nginx
     ports:
-      - "8080:80"
+      - "80:80"
+    volumes:
+      - ./web:/var/www/html
   wordpress:
-    build: srcs/requirements/wordpress/.
+    build: ./requirements/wordpress
     container_name: inception_wordpress
+    volumes:
+      - ./web:/var/www/html
 
   mariadb:
     build: srcs/requirements/mariadb/.

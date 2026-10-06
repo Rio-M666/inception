@@ -1,1 +1,1 @@
-FROM debian:netinst
+FROM debian:trixie

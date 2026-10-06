@@ -1,4 +1,4 @@
-FROM debian:netinst
+FROM debian:trixie
 
 RUN apt-get update && apt-get install -y nginx openssl
 RUN mkdir -p /etc/enginx/ssl
