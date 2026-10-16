@@ -9,10 +9,11 @@
 | 項目 | 確認結果・対応 |
 | --- | --- |
 | `README.md` | 空。冒頭の指定文、Description、Instructions、Resources、AI の利用説明などを記入する必要があります。課題では英語での記述も指定されています。 |
-| `USER_DOC.md` | 空。起動・停止、サイトと管理画面、認証情報の管理、稼働確認を記入する必要があります。 |
-| `DEV_DOC.md` | 空。前提条件、初期設定、ビルド、Compose 操作、永続化を記入する必要があります。 |
-| Compose の構文 | `config --quiet` は成功。`version: "3.8"` が現在の Compose では不要という警告が出ます。 |
-| 既存コンテナ | `mariadb`・`wordpress`・`nginx` が起動中。ホスト公開は NGINX の 443 のみ。ただし、新規ビルドからの成功を示すものではありません。 |
+| `USER_DOC.md` | 起動・停止、管理画面、認証情報、保存先の確認手順を記載しています。 |
+| `DEV_DOC.md` | data-root の設定、ビルド、Compose 操作、Named Volume と既存データの移行手順を記載しています。 |
+| Compose の構文 | 不要な `version` 指定を削除しました。構文は `config --quiet` で確認します。 |
+| 既存コンテナ | `make` によるビルド・起動、コンテナ削除後の再作成、サイト表示、管理者ログインを確認しました。ホスト公開は NGINX の 443 のみです。 |
+| 永続ストレージ | 通常の Named Volume に移行済みです。`Mountpoint` は `/home/mrio/data/docker/volumes/` 配下、`Options` は `null` です。投稿・コメント・ユーザーが移行前と一致することを確認しました。 |
 | `.env` | 現在の `main` の追跡ファイル・履歴にはありません。ローカルファイルとして用意する必要があります。 |
 | MariaDB 起動スクリプト | `service mariadb start` で一度デーモンを起動します。評価シートの「entrypoint 内でバックグラウンド起動しない」という条件との整合性を見直してください。 |
 | 再起動時の DB 認証 | スクリプト内の `mariadb -e` は認証なしです。root パスワード設定済みのデータで再起動した際にも初期化処理が成功するか確認が必要です。 |
@@ -20,7 +21,7 @@
 
 **添付の評価シートでは、必須ドキュメントの不足・空ファイルは評価中止の条件です。先に修正してください。この手順書は、それらの必須ドキュメントの代わりにはなりません。**
 
-以下の停止・削除・再起動・設定変更は手順として記載したものです。手順書作成時には実行していません。
+以下は評価用の手順です。ストレージ移行時にはサービスの停止・再作成と Docker デーモンの再起動を行いました。VM 自体の再起動と、評価シートの全リソース削除コマンドは実行していません。
 
 ## 1. 本人・提出物・作業環境を確認する
 
@@ -153,6 +154,10 @@ getent hosts mrio.42.fr
 
 VM 内のブラウザなら VM 内の hosts を、ホスト PC のブラウザならホスト PC の hosts を設定します。後者で `127.0.0.1` を使えるのは、ポート転送を設定している場合です。
 
+### Docker の保存先
+
+初回は [DEV_DOC.md](DEV_DOC.md) に従い、`srcs/docker/daemon.json` を使ってホストの Docker デーモンを設定します。`docker info --format '{{.DockerRootDir}}'` が `/home/mrio/data/docker` を表示することを確認してください。`.env` の `LOGIN` 変更だけではデーモン設定は変わりません。既存データがある環境では、先にバックアップと移行が必要です。
+
 ### 全 Docker リソースの削除：評価用 VM でのみ実施
 
 **次のコマンドは Inception 以外も含め、接続先 Docker エンジンのコンテナ・イメージ・ボリューム・ネットワークを削除します。`docker context show` と `docker context inspect` で接続先を確認し、評価用 VM の Docker エンジンに接続していることを確かめてから実行してください。**
@@ -172,9 +177,9 @@ docker volume ls
 docker network ls
 ```
 
-この処理で named volume を削除しても、現在の構成では `/home/mrio/data` の実データは残ります。「既存データからの起動」と「空のデータからの初期構築」は区別してください。空から試す場合は、学生と保存データを確認し、必要なバックアップを取ってから行います。
+通常の Named Volume を使う現在の構成では、`docker volume rm` によって保存データも削除されます。全削除テストの前に必要なバックアップを取り、「既存データからの起動」と「空のデータからの初期構築」を区別してください。
 
-**現在の `make fclean` と `make re` は `/home/<LOGIN>/data` 自体を削除します。永続化テスト中には使わないでください。**
+**`make fclean` と `make re` はプロジェクトの Named Volume と保存データを削除します。永続化テスト中には使わないでください。Docker の管理ディレクトリ自体を削除する処理はありません。**
 
 ## 5. Makefile からビルド・起動する
 
@@ -194,7 +199,7 @@ dc logs --tail=100
 
 期待結果：
 
-- Makefile が保存先ディレクトリを作り、Compose で自作イメージをビルドする。
+- Makefile が Docker の保存先を確認し、Compose で自作イメージをビルドする。
 - 3 サービスが起動する。`Exited` や `Restarting` のままにならない。
 - サイトへのアクセスまで成功する。`Up` の表示だけで初期化成功と判断しない。
 - イメージ名が各サービス名と一致する。
@@ -302,10 +307,10 @@ docker inspect nginx --format '{{json .Mounts}}'
 
 - WordPress の `/var/www/html` が `inception_wordpress_data` に接続されている。
 - NGINX も同じボリュームを `/var/www/html` に接続している。
-- volume inspect の `Options.device` が `/home/mrio/data/wordpress` である。
+- volume inspect の `Mountpoint` が `/home/mrio/data/docker/volumes/inception_wordpress_data/_data` である。
 - コンテナ側のマウント種別が `volume` になっている。
 
-この構成は named volume の local driver に `type: none`、`o: bind`、`device` を渡しています。`Mountpoint` が `/var/lib/docker/volumes/.../_data` でも、実データの指定先は `Options.device` にあります。コンテナへ直接 `type: bind` で接続する指定との違いを説明し、課題原文の bind mount 禁止条件に照らして評価者と確認してください。
+この構成では追加の driver options を使わず、通常の Named Volume を作成します。`Options` は `null` または空で、`o: bind` や `device` の指定はありません。Docker の `data-root` を `/home/mrio/data/docker` に設定することで、`Mountpoint` 自体が課題の指定パス配下になります。
 
 ## 10. MariaDB・データ・DB 用ボリュームを確認する
 
@@ -338,7 +343,7 @@ EXIT;
 - WordPress 用 DB が存在し、空ではない。
 - WordPress のテーブル・ユーザー・投稿データが入っている。
 - 前の手順で作ったコメントが、承認待ちも含め DB に保存されている。
-- `Options.device` が `/home/mrio/data/mariadb`、接続先が `/var/lib/mysql` である。
+- `Mountpoint` が `/home/mrio/data/docker/volumes/inception_mariadb_data/_data`、接続先が `/var/lib/mysql` である。`Options` に bind 指定がない。
 - 学生が接続方法、DB 名、アプリ用ユーザーと root の役割を説明できる。
 
 ## 11. VM の再起動で永続化を確認する
